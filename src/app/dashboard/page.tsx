@@ -4,14 +4,20 @@ import { useEffect, useState, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 
+type Document = {
+  id: string
+  title: string
+  summary: string
+  created_at: string
+}
+
 export default function Dashboard() {
   const router = useRouter()
   const [email, setEmail] = useState('')
   const [loading, setLoading] = useState(false)
-  const [summary, setSummary] = useState('')
-  const [fileName, setFileName] = useState('')
+  const [documents, setDocuments] = useState<Document[]>([])
+  const [selectedDoc, setSelectedDoc] = useState<Document | null>(null)
   const [error, setError] = useState('')
-  const [pages, setPages] = useState(0)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -21,10 +27,19 @@ export default function Dashboard() {
         router.push('/auth/login')
       } else {
         setEmail(user.email || '')
+        loadDocuments()
       }
     }
     getUser()
   }, [router])
+
+  const loadDocuments = async () => {
+    const { data } = await supabase
+      .from('documents')
+      .select('*')
+      .order('created_at', { ascending: false })
+    if (data) setDocuments(data)
+  }
 
   const handleLogout = async () => {
     await supabase.auth.signOut()
@@ -42,8 +57,7 @@ export default function Dashboard() {
 
     setLoading(true)
     setError('')
-    setSummary('')
-    setFileName(file.name)
+    setSelectedDoc(null)
 
     const formData = new FormData()
     formData.append('file', file)
@@ -59,13 +73,28 @@ export default function Dashboard() {
       if (data.error) {
         setError(data.error)
       } else {
-        setSummary(data.summary)
-        setPages(data.pages)
+        const { data: { user } } = await supabase.auth.getUser()
+        const { data: saved } = await supabase
+          .from('documents')
+          .insert({
+            title: file.name,
+            summary: data.summary,
+            content: '',
+            user_id: user!.id,
+          })
+          .select()
+          .single()
+
+        if (saved) {
+          setSelectedDoc(saved)
+          loadDocuments()
+        }
       }
     } catch {
       setError('Erro ao processar documento. Tente novamente.')
     } finally {
       setLoading(false)
+      if (fileInputRef.current) fileInputRef.current.value = ''
     }
   }
 
@@ -84,57 +113,83 @@ export default function Dashboard() {
         </div>
       </nav>
 
-      <div className="max-w-4xl mx-auto px-6 py-12">
-        <h2 className="text-2xl font-bold text-gray-900 mb-2">Meus documentos</h2>
-        <p className="text-gray-500 mb-8">Faça upload de um PDF para gerar um resumo com IA.</p>
+      <div className="max-w-5xl mx-auto px-6 py-12 flex gap-8">
 
-        <div
-          onClick={() => fileInputRef.current?.click()}
-          className="border-2 border-dashed border-gray-300 rounded-xl p-12 text-center cursor-pointer hover:border-black transition"
-        >
-          <p className="text-4xl mb-4">📄</p>
-          {loading ? (
-            <p className="text-gray-500">Processando documento...</p>
+        <div className="w-64 flex-shrink-0">
+          <h2 className="text-sm font-medium text-gray-500 uppercase tracking-wide mb-4">Histórico</h2>
+          {documents.length === 0 ? (
+            <p className="text-sm text-gray-400">Nenhum documento ainda</p>
           ) : (
-            <>
-              <p className="text-gray-500 mb-4">Clique para selecionar um PDF</p>
-              <button className="bg-black text-white px-6 py-3 rounded-lg font-medium hover:bg-gray-800 transition">
-                Upload de PDF
-              </button>
-            </>
+            <div className="flex flex-col gap-2">
+              {documents.map((doc) => (
+                <button
+                  key={doc.id}
+                  onClick={() => setSelectedDoc(doc)}
+                  className={`text-left px-3 py-2 rounded-lg text-sm transition ${
+                    selectedDoc?.id === doc.id
+                      ? 'bg-black text-white'
+                      : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-50'
+                  }`}
+                >
+                  <p className="font-medium truncate">{doc.title}</p>
+                  <p className={`text-xs mt-1 ${selectedDoc?.id === doc.id ? 'text-gray-300' : 'text-gray-400'}`}>
+                    {new Date(doc.created_at).toLocaleDateString('pt-BR')}
+                  </p>
+                </button>
+              ))}
+            </div>
           )}
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".pdf"
-            onChange={handleUpload}
-            className="hidden"
-          />
         </div>
 
-        {error && (
-          <div className="mt-6 bg-red-50 border border-red-200 rounded-xl p-4">
-            <p className="text-red-600 text-sm">{error}</p>
+        <div className="flex-1">
+          <div
+            onClick={() => !loading && fileInputRef.current?.click()}
+            className="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center cursor-pointer hover:border-black transition mb-6"
+          >
+            <p className="text-3xl mb-3">📄</p>
+            {loading ? (
+              <p className="text-gray-500">Processando documento com IA...</p>
+            ) : (
+              <>
+                <p className="text-gray-500 mb-3">Clique para selecionar um PDF</p>
+                <button className="bg-black text-white px-5 py-2 rounded-lg font-medium hover:bg-gray-800 transition text-sm">
+                  Upload de PDF
+                </button>
+              </>
+            )}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".pdf"
+              onChange={handleUpload}
+              className="hidden"
+            />
           </div>
-        )}
 
-        {summary && (
-          <div className="mt-8 bg-white border border-gray-200 rounded-xl p-6">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-bold text-gray-900">Resumo — {fileName}</h3>
-              <span className="text-sm text-gray-500">{pages} página{pages > 1 ? 's' : ''}</span>
+          {error && (
+            <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-6">
+              <p className="text-red-600 text-sm">{error}</p>
             </div>
-            <div className="text-gray-700 whitespace-pre-wrap leading-relaxed">
-              {summary}
+          )}
+
+          {selectedDoc && (
+            <div className="bg-white border border-gray-200 rounded-xl p-6">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-bold text-gray-900 truncate">{selectedDoc.title}</h3>
+                <button
+                  onClick={() => navigator.clipboard.writeText(selectedDoc.summary)}
+                  className="text-sm border border-gray-300 px-3 py-1.5 rounded-lg hover:bg-gray-100 transition flex-shrink-0 ml-4"
+                >
+                  Copiar
+                </button>
+              </div>
+              <div className="text-gray-700 whitespace-pre-wrap leading-relaxed text-sm">
+                {selectedDoc.summary}
+              </div>
             </div>
-            <button
-              onClick={() => navigator.clipboard.writeText(summary)}
-              className="mt-4 text-sm border border-gray-300 px-4 py-2 rounded-lg hover:bg-gray-100 transition"
-            >
-              Copiar resumo
-            </button>
-          </div>
-        )}
+          )}
+        </div>
+
       </div>
     </main>
   )
