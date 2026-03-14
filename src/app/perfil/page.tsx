@@ -80,8 +80,8 @@ export default function Perfil() {
   return (
     <main className="min-h-screen bg-gray-950 flex flex-col">
       <nav className="bg-gray-900 border-b border-gray-800 px-6 py-4 flex justify-between items-center">
-        <Link href="/" className="text-xl font-bold tracking-tight text-white hover:opacity-70 transition">
-          Astro<span className="text-gray-500">PDF</span>
+        <Link href="/dashboard" className="text-xl font-bold tracking-tight text-white hover:opacity-70 transition">
+        Astro<span className="text-gray-500">PDF</span>
         </Link>
         <Link
           href="/dashboard"
