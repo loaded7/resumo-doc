@@ -29,6 +29,7 @@ export default function Dashboard() {
   const [messages, setMessages] = useState<Message[]>([])
   const [chatInput, setChatInput] = useState('')
   const [chatLoading, setChatLoading] = useState(false)
+  const [isDragging, setIsDragging] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const chatEndRef = useRef<HTMLDivElement>(null)
 
@@ -48,6 +49,16 @@ export default function Dashboard() {
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
+
+  useEffect(() => {
+    const preventDefault = (e: DragEvent) => e.preventDefault()
+    window.addEventListener('dragover', preventDefault)
+    window.addEventListener('drop', preventDefault)
+    return () => {
+      window.removeEventListener('dragover', preventDefault)
+      window.removeEventListener('drop', preventDefault)
+    }
+  }, [])
 
   const loadDocuments = async () => {
     const { data } = await supabase
@@ -74,10 +85,7 @@ export default function Dashboard() {
     loadDocuments()
   }
 
-  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-
+  const processFile = async (file: File) => {
     if (!file.name.endsWith('.pdf')) {
       setError('Por favor envie apenas arquivos PDF')
       return
@@ -124,6 +132,20 @@ export default function Dashboard() {
       setLoading(false)
       if (fileInputRef.current) fileInputRef.current.value = ''
     }
+  }
+
+  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) await processFile(file)
+  }
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(false)
+    if (loading) return
+    const file = e.dataTransfer.files[0]
+    if (file) await processFile(file)
   }
 
   const handleChat = async () => {
@@ -177,21 +199,33 @@ export default function Dashboard() {
       </nav>
 
       <div className="flex flex-1 overflow-hidden">
-        {/* Sidebar */}
         <div className="w-64 bg-gray-900 border-r border-gray-800 flex flex-col p-4 gap-4">
           <div
             onClick={() => !loading && fileInputRef.current?.click()}
-            className="border-2 border-dashed border-gray-700 rounded-xl p-4 text-center cursor-pointer hover:border-gray-500 hover:bg-gray-800 transition"
+            onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setIsDragging(true) }}
+            onDragEnter={(e) => { e.preventDefault(); e.stopPropagation(); setIsDragging(true) }}
+            onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setIsDragging(false) }}
+            onDrop={handleDrop}
+            className={`border-2 border-dashed rounded-xl p-4 text-center cursor-pointer transition ${
+              isDragging
+                ? 'border-white bg-gray-800'
+                : 'border-gray-700 hover:border-gray-500 hover:bg-gray-800'
+            }`}
           >
             {loading ? (
               <div className="flex flex-col items-center gap-2 py-1">
                 <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
                 <p className="text-xs text-gray-400">Processando...</p>
               </div>
+            ) : isDragging ? (
+              <>
+                <p className="text-xl mb-1">⬇️</p>
+                <p className="text-xs text-white">Solte aqui!</p>
+              </>
             ) : (
               <>
                 <p className="text-xl mb-1">📄</p>
-                <p className="text-xs text-gray-400">Upload de PDF</p>
+                <p className="text-xs text-gray-400">Upload ou arraste um PDF</p>
               </>
             )}
             <input
@@ -238,7 +272,6 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Main */}
         <div className="flex-1 p-8 overflow-y-auto">
           {error && (
             <div className="bg-red-900/30 border border-red-800 rounded-xl p-4 mb-6">
@@ -247,17 +280,32 @@ export default function Dashboard() {
           )}
 
           {!selectedDoc ? (
-            <div className="flex flex-col items-center justify-center h-full text-center gap-4">
-              <div className="text-6xl">🚀</div>
-              <h2 className="text-xl font-bold text-white">Pronto pra resumir?</h2>
-              <p className="text-gray-500 text-sm max-w-sm">Clique em "Upload de PDF" na barra lateral ou arraste um arquivo pra começar.</p>
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                className="mt-2 bg-white text-gray-900 px-6 py-3 rounded-xl text-sm font-medium hover:bg-gray-100 transition"
-              >
-                Fazer upload agora →
-              </button>
-            </div>
+  <div
+    onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setIsDragging(true) }}
+    onDragEnter={(e) => { e.preventDefault(); e.stopPropagation(); setIsDragging(true) }}
+    onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setIsDragging(false) }}
+    onDrop={handleDrop}
+    onClick={() => !isDragging && fileInputRef.current?.click()}
+    className={`flex flex-col items-center justify-center h-full text-center gap-6 rounded-2xl border-2 border-dashed transition cursor-pointer ${
+      isDragging ? 'border-white bg-gray-900' : 'border-gray-700 hover:border-gray-500 hover:bg-gray-900'
+    }`}
+  >
+    <div className="text-6xl">{isDragging ? '⬇️' : '🚀'}</div>
+    <h2 className="text-xl font-bold text-white">
+      {isDragging ? 'Solte aqui!' : 'Pronto pra resumir?'}
+    </h2>
+    <p className="text-gray-500 text-sm max-w-sm">
+      {isDragging ? 'Pode soltar o PDF agora.' : 'Clique no botão ou arraste um PDF pra começar.'}
+    </p>
+    {!isDragging && (
+      <button
+        onClick={() => fileInputRef.current?.click()}
+        className="mt-2 bg-white text-gray-900 px-6 py-3 rounded-xl text-sm font-medium hover:bg-gray-100 transition"
+      >
+        Fazer upload agora →
+      </button>
+    )}
+  </div>
           ) : (
             <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
               <div className="px-6 pt-6 pb-0">
