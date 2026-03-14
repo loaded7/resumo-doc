@@ -30,6 +30,7 @@ export default function Login() {
   return (
     <main className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
       <div className="bg-white p-8 rounded-xl shadow-sm border border-gray-200 w-full max-w-md">
+        <p className="text-xl font-bold tracking-tight mb-6">Astro<span className="text-gray-400">PDF</span></p>
         <h1 className="text-2xl font-bold text-gray-900 mb-2">Entrar</h1>
         <p className="text-gray-500 mb-6">Bem-vindo de volta!</p>
 
